@@ -4,12 +4,17 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const dotenv = require('dotenv');
 const bodyParser = require('body-parser');
+const cors = require('cors');
+
 
 dotenv.config();
 
 const app = express();
 const port = 3000;
 
+app.use(cors({
+  origin: process.env.URL_FRONTEND  // Reemplaza con la URL de tu frontend
+}));
 // Middleware
 app.use(bodyParser.json());
 
@@ -34,18 +39,32 @@ db.connect(err => {
 app.post('/register', async (req, res) => {
   const { username, password } = req.body;
   try {
-    const hashedPassword = await bcrypt.hash(password, 10);
-    db.query('INSERT INTO users (username, password) VALUES (?, ?)', [username, hashedPassword], (err, results) => {
+    db.query('SELECT * FROM users WHERE username = ?', [username], async (err, results) => {
       if (err) {
         return res.status(500).json({ 
           trans: false,
-          message: 'Database error', 
-          error: err 
+          message: 'Database error', error: err 
         });
       }
-      res.status(201).json({ 
-        trans: true,
-        message: 'Usuario registrado exitosamente.' 
+      if (results.length > 0) {
+        return res.status(401).json({ 
+          trans: false,
+          message: 'Este usuario ya se encuentra registrado, por favor ingrese otro.' 
+        });
+      }
+      const hashedPassword = await bcrypt.hash(password, 10);
+      db.query('INSERT INTO users (username, password) VALUES (?, ?)', [username, hashedPassword], (err, results) => {
+        if (err) {
+          return res.status(500).json({ 
+            trans: false,
+            message: 'Database error', 
+            error: err 
+          });
+        }
+        res.status(201).json({ 
+          trans: true,
+          message: 'Usuario registrado exitosamente.' 
+        });
       });
     });
   } catch (error) {
@@ -78,10 +97,11 @@ app.post('/login', (req, res) => {
           message: 'Usuario o contraseña incorrecta.' 
         });
       }
-      const token = jwt.sign({ id: user.id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '1h' });
+      const token = jwt.sign({ id: user.id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '1d' });
       res.json({ 
         trans: true,
-        message: 'Login exitoso', token 
+        message: 'Login exitoso',
+        token 
       });
     } catch (error) {
       res.status(500).json({ message: 'Error comparando las contraseñas.', error });
